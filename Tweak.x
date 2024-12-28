@@ -1,14 +1,16 @@
 #import <version.h>
 #import "Header.h"
-#import "../YouTubeHeader/MLPIPController.h"
-#import "../YouTubeHeader/MLVideoDecoderFactory.h"
-#import "../YouTubeHeader/MLDefaultPlayerViewFactory.h"
-#import "../YouTubeHeader/YTBackgroundabilityPolicy.h"
-#import "../YouTubeHeader/YTHotConfig.h"
-#import "../YouTubeHeader/YTLocalPlaybackController.h"
-#import "../YouTubeHeader/YTPlayerPIPController.h"
-#import "../YouTubeHeader/YTPlayerViewController.h"
-// #import "../YouTubeHeader/QTMIcon.h"
+#import <YouTubeHeader/MLDefaultPlayerViewFactory.h>
+#import <YouTubeHeader/MLPIPController.h>
+#import <YouTubeHeader/MLPlayerStickySettings.h>
+#import <YouTubeHeader/MLVideoDecoderFactory.h>
+#import <YouTubeHeader/YTBackgroundabilityPolicy.h>
+#import <YouTubeHeader/YTBackgroundabilityPolicyImpl.h>
+#import <YouTubeHeader/YTHotConfig.h>
+#import <YouTubeHeader/YTLocalPlaybackController.h>
+#import <YouTubeHeader/YTPlayerPIPController.h>
+#import <YouTubeHeader/YTPlayerViewController.h>
+// #import <YouTubeHeader/QTMIcon.h>
 
 // @interface QTMButton : UIButton
 // + (instancetype)ytm_flatRoundButtonWithImage:(UIImage *)image selectedImage:(UIImage *)selectedImage accessibilityLabel:(NSString *)accessibilityLabel accessibilityIdentifier:(NSString *)accessibilityIdentifier;
@@ -59,9 +61,10 @@ static void forceRenderViewType(YTHotConfig *hotConfig) {
 
 
 static void forcePictureInPictureInternal(YTHotConfig *hotConfig, BOOL value) {
-    [hotConfig mediaHotConfig].enablePictureInPicture = value;
-    YTIIosMediaHotConfig *iosMediaHotConfig = [[[hotConfig hotConfigGroup] mediaHotConfig] iosMediaHotConfig];
-    iosMediaHotConfig.enablePictureInPicture = value;
+    YTIIosMediaHotConfig *mediaHotConfig = [hotConfig mediaHotConfig];
+    mediaHotConfig.enablePictureInPicture = value;
+    if ([mediaHotConfig respondsToSelector:@selector(setEnablePipForNonPremiumUsers:)])
+        mediaHotConfig.enablePipForNonPremiumUsers = value;
 }
 
 static void forceEnablePictureInPictureInternal(YTHotConfig *hotConfig) {
@@ -203,13 +206,29 @@ static void bootstrapPiP(YTPlayerViewController *self, BOOL playPiP) {
     return %orig;
 }
 
+- (MLAVPlayerLayerView *)AVPlayerViewForPlayerConfig:(MLInnerTubePlayerConfig *)playerConfig {
+    forceEnablePictureInPictureInternal([self valueForKey:@"_hotConfig"]);
+    return %orig;
+}
+
 - (id)hamPlayerViewForVideo:(MLVideo *)video playerConfig:(MLInnerTubePlayerConfig *)playerConfig {
     forceRenderViewType([self valueForKey:@"_hotConfig"]);
     forceRenderViewTypeBase([playerConfig hamplayerConfig]);
     return %orig;
 }
 
+- (id)hamPlayerViewForPlayerConfig:(MLInnerTubePlayerConfig *)playerConfig {
+    forceRenderViewType([self valueForKey:@"_hotConfig"]);
+    forceRenderViewTypeBase([playerConfig hamplayerConfig]);
+    return %orig;
+}
+
 - (BOOL)canUsePlayerView:(id)playerView forVideo:(MLVideo *)video playerConfig:(MLInnerTubePlayerConfig *)playerConfig {
+    forceRenderViewTypeBase([playerConfig hamplayerConfig]);
+    return %orig;
+}
+
+- (BOOL)canUsePlayerView:(id)playerView forPlayerConfig:(MLInnerTubePlayerConfig *)playerConfig {
     forceRenderViewTypeBase([playerConfig hamplayerConfig]);
     return %orig;
 }
@@ -228,6 +247,20 @@ static void bootstrapPiP(YTPlayerViewController *self, BOOL playPiP) {
 #pragma mark - PiP Support, Backgroundable
 
 %hook YTBackgroundabilityPolicy
+
+- (void)updateIsBackgroundableByUserSettings {
+    %orig;
+    [self setValue:@(YES) forKey:@"_backgroundableByUserSettings"];
+}
+
+- (void)updateIsPictureInPicturePlayableByUserSettings {
+    %orig;
+    [self setValue:@(YES) forKey:@"_playableInPiPByUserSettings"];
+}
+
+%end
+
+%hook YTBackgroundabilityPolicyImpl
 
 - (void)updateIsBackgroundableByUserSettings {
     %orig;

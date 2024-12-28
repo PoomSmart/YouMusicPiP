@@ -3,7 +3,7 @@ Name: YouMusicPiP
 Depends: mobilesubstrate (>= 0.9.5000), firmware (>= 11.0), firmware (>= 14.0) | gsc.ipad | com.cabralcole.forceinpicture | com.ps.forceinpicture
 Version: 1.0.0
 Architecture: iphoneos-arm
-Description: Enable native PiP in YouTube Music app.
+Description: Enable native PiP in iOS YouTube Music app.
 Maintainer: PoomSmart
 Author: PoomSmart
 Section: Tweaks

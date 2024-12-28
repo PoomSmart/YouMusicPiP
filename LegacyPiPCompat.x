@@ -1,15 +1,15 @@
 #import "Header.h"
-#import "../PSHeader/iOSVersions.h"
-#import "../YouTubeHeader/MLAVPlayer.h"
-#import "../YouTubeHeader/MLHAMQueuePlayer.h"
-#import "../YouTubeHeader/MLPIPController.h"
-#import "../YouTubeHeader/MLPlayerPoolImpl.h"
-#import "../YouTubeHeader/MLDefaultPlayerViewFactory.h"
-#import "../YouTubeHeader/YTHotConfig.h"
-#import "../YouTubeHeader/YTPlayerPIPController.h"
-#import "../YouTubeHeader/YTBackgroundabilityPolicy.h"
-#import "../YouTubeHeader/YTPlayerViewControllerConfig.h"
-#import "../YouTubeHeader/YTSystemNotifications.h"
+#import <PSHeader/iOSVersions.h>
+#import <YouTubeHeader/MLAVPlayer.h>
+#import <YouTubeHeader/MLHAMQueuePlayer.h>
+#import <YouTubeHeader/MLPIPController.h>
+#import <YouTubeHeader/MLPlayerPoolImpl.h>
+#import <YouTubeHeader/MLDefaultPlayerViewFactory.h>
+#import <YouTubeHeader/YTHotConfig.h>
+#import <YouTubeHeader/YTPlayerPIPController.h>
+#import <YouTubeHeader/YTBackgroundabilityPolicy.h>
+#import <YouTubeHeader/YTPlayerViewControllerConfig.h>
+#import <YouTubeHeader/YTSystemNotifications.h>
 
 extern BOOL isPictureInPictureActive(MLPIPController *);
 
@@ -93,9 +93,15 @@ MLPIPController *InjectMLPIPController() {
 
 - (instancetype)initWithStickySettings:(MLPlayerStickySettings *)stickySettings playerViewProvider:(MLPlayerPoolImpl *)playerViewProvider playerConfiguration:(void *)playerConfiguration {
     self = %orig;
-    if ([self valueForKey:@"_pipController"] == nil) {
+    if ([self valueForKey:@"_pipController"] == nil)
         [self setValue:InjectMLPIPController() forKey:@"_pipController"];
-    }
+    return self;
+}
+
+- (instancetype)initWithStickySettings:(MLPlayerStickySettings *)stickySettings playerViewProvider:(MLPlayerPoolImpl *)playerViewProvider playerConfiguration:(void *)playerConfiguration mediaPlayerResources:(id)mediaPlayerResources {
+    self = %orig;
+    if ([self valueForKey:@"_pipController"] == nil)
+        [self setValue:InjectMLPIPController() forKey:@"_pipController"];
     return self;
 }
 
@@ -124,16 +130,15 @@ MLPIPController *InjectMLPIPController() {
 %hook MLPIPController
 
 - (void)activatePiPController {
-    if (!isPictureInPictureActive(self)) {
-        AVPictureInPictureController *avpip = [self valueForKey:@"_pictureInPictureController"];
-        if (!avpip) {
-            MLAVPIPPlayerLayerView *playerLayerView = [self valueForKey:@"_AVPlayerView"];
-            if (playerLayerView) {
-                AVPlayerLayer *playerLayer = [playerLayerView playerLayer];
-                avpip = [[AVPictureInPictureController alloc] initWithPlayerLayer:playerLayer];
-                [self setValue:avpip forKey:@"_pictureInPictureController"];
-                avpip.delegate = self;
-            }
+    if (isPictureInPictureActive(self)) return;
+    AVPictureInPictureController *avpip = [self valueForKey:@"_pictureInPictureController"];
+    if (!avpip) {
+        MLAVPIPPlayerLayerView *playerLayerView = [self valueForKey:@"_AVPlayerView"];
+        if (playerLayerView) {
+            AVPlayerLayer *playerLayer = [playerLayerView playerLayer];
+            avpip = [[AVPictureInPictureController alloc] initWithPlayerLayer:playerLayer];
+            [self setValue:avpip forKey:@"_pictureInPictureController"];
+            avpip.delegate = self;
         }
     }
 }
@@ -149,7 +154,7 @@ MLPIPController *InjectMLPIPController() {
 %hook MLPlayerPoolImpl
 
 - (id)acquirePlayerForVideo:(MLVideo *)video playerConfig:(MLInnerTubePlayerConfig *)playerConfig stickySettings:(MLPlayerStickySettings *)stickySettings {
-    BOOL externalPlaybackActive = [(MLPlayer *)[self valueForKey:@"_activePlayer"] externalPlaybackActive];
+    BOOL externalPlaybackActive = [(MLAVPlayer *)[self valueForKey:@"_activePlayer"] externalPlaybackActive];
     MLAVPlayer *player = [[%c(MLAVPlayer) alloc] initWithVideo:video playerConfig:playerConfig stickySettings:stickySettings externalPlaybackActive:externalPlaybackActive];
     if (stickySettings)
         player.rate = stickySettings.rate;
@@ -157,7 +162,7 @@ MLPIPController *InjectMLPIPController() {
 }
 
 - (id)acquirePlayerForVideo:(MLVideo *)video playerConfig:(MLInnerTubePlayerConfig *)playerConfig stickySettings:(MLPlayerStickySettings *)stickySettings latencyLogger:(id)latencyLogger {
-    BOOL externalPlaybackActive = [(MLPlayer *)[self valueForKey:@"_activePlayer"] externalPlaybackActive];
+    BOOL externalPlaybackActive = [(MLAVPlayer *)[self valueForKey:@"_activePlayer"] externalPlaybackActive];
     MLAVPlayer *player = [[%c(MLAVPlayer) alloc] initWithVideo:video playerConfig:playerConfig stickySettings:stickySettings externalPlaybackActive:externalPlaybackActive];
     if (stickySettings)
         player.rate = stickySettings.rate;
@@ -181,31 +186,30 @@ MLPIPController *InjectMLPIPController() {
 
 %hook AVPictureInPictureController
 
-%new
-- (void)invalidatePlaybackState {
+%new(v@:)
+- (void)invalidatePlaybackState {}
 
-}
+%new(v@:)
+- (void)sampleBufferDisplayLayerDidDisappear {}
 
-%new
-- (void)sampleBufferDisplayLayerDidDisappear {
+%new(v@:)
+- (void)sampleBufferDisplayLayerDidAppear {}
 
-}
+%new(v@:{CGSize=dd})
+- (void)sampleBufferDisplayLayerRenderSizeDidChangeToSize:(CGSize)size {}
 
-%new
-- (void)sampleBufferDisplayLayerDidAppear {
+%new(v@:B)
+- (void)setRequiresLinearPlayback:(BOOL)linear {}
 
-}
-
-%new
-- (void)sampleBufferDisplayLayerRenderSizeDidChangeToSize:(CGSize)size {
-
-}
+%new(v@:)
+- (void)reloadPrerollAttributes {}
 
 %end
 
 %end
 
 %ctor {
+    if (IS_IOS_OR_NEWER(iOS_15_0)) return;
     %init;
     if (!IS_IOS_OR_NEWER(iOS_14_0)) {
         %init(Compat);
